@@ -59,7 +59,7 @@ export default function AdminLogin() {
         {message && <div className="form-alert error">{message}</div>}
         <form onSubmit={submit}>
           <label>
-            Email
+            Tài khoản
             <div className="input-icon">
               <Mail />
               <input

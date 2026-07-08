@@ -145,8 +145,10 @@ export default function AdminProjects() {
       const existingImages = (form.image_urls || []).filter(
         Boolean,
       ) as string[];
-      const imageUrls = [...existingImages, cover, ...uploadedImages].filter(
-        Boolean,
+      const imageUrls = Array.from(
+        new Set(
+          [...existingImages, cover, ...uploadedImages].filter(Boolean),
+        ),
       );
       const {
         id,

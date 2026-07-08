@@ -7,7 +7,7 @@ type QueryBuilder = {
   order: (...args: any[]) => QueryBuilder;
   limit: (...args: any[]) => QueryBuilder;
   single: () => Promise<QueryResult>;
-  insert: (payload: any) => Promise<QueryResult>;
+  insert: (payload: any) => QueryBuilder;
   update: (payload: any) => QueryBuilder;
   delete: () => QueryBuilder;
   then: (resolve: (value: QueryResult) => any, reject?: (reason?: any) => any) => Promise<any>;
@@ -59,6 +59,7 @@ const createQueryBuilder = (baseUrl: string, anonKey: string, table: string): Qu
     body?: any;
     countMode?: 'exact' | 'planned' | 'estimated';
     head?: boolean;
+    wantsRepresentation?: boolean;
   } = {
     method: 'GET',
     select: '*',
@@ -85,6 +86,9 @@ const createQueryBuilder = (baseUrl: string, anonKey: string, table: string): Qu
     const preferParts: string[] = [];
     if (state.countMode) preferParts.push(`count=${state.countMode}`);
     if (state.head) preferParts.push('return=minimal');
+    if (state.wantsRepresentation && (state.method === 'POST' || state.method === 'PATCH')) {
+      preferParts.push('return=representation');
+    }
     if (preferParts.length) headers.Prefer = preferParts.join(',');
 
     const requestInit: RequestInit = {
@@ -128,6 +132,7 @@ const createQueryBuilder = (baseUrl: string, anonKey: string, table: string): Qu
       const options = args[1] as { count?: 'exact' | 'planned' | 'estimated'; head?: boolean } | undefined;
       if (options?.count) state.countMode = options.count;
       if (options?.head) state.head = true;
+      if (state.method === 'POST' || state.method === 'PATCH') state.wantsRepresentation = true;
       return chain;
     },
     eq: (...args: any[]) => {
@@ -154,17 +159,19 @@ const createQueryBuilder = (baseUrl: string, anonKey: string, table: string): Qu
       return chain;
     },
     single: async () => {
-      state.queryParams.push({ key: 'limit', value: '1' });
+      if (state.method === 'GET') {
+        state.queryParams.push({ key: 'limit', value: '1' });
+      }
       const result = await execute();
       if (Array.isArray(result.data)) {
         return { data: result.data[0] ?? null, error: result.error };
       }
       return result;
     },
-    insert: async (payload: any) => {
+    insert: (payload: any) => {
       state.method = 'POST';
       state.body = payload;
-      return execute();
+      return chain;
     },
     update: (payload: any) => {
       state.method = 'PATCH';

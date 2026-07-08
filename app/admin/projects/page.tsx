@@ -1,5 +1,5 @@
 "use client";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Edit3, Plus, Trash2, Upload, X } from "lucide-react";
 import AdminGuard from "@/components/admin/AdminGuard";
 import AdminShell from "@/components/admin/AdminShell";
@@ -43,6 +43,54 @@ export default function AdminProjects() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const coverInputRef = useRef<HTMLInputElement>(null);
+  const imagesInputRef = useRef<HTMLInputElement>(null);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string>("");
+  const [newImages, setNewImages] = useState<
+    { file: File; preview: string }[]
+  >([]);
+
+  const onCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCoverFile(file);
+    setCoverPreview(URL.createObjectURL(file));
+  };
+
+  const clearCover = () => {
+    if (coverPreview) URL.revokeObjectURL(coverPreview);
+    setCoverFile(null);
+    setCoverPreview("");
+    if (coverInputRef.current) coverInputRef.current.value = "";
+  };
+
+  const onImagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setNewImages((prev) => [
+      ...prev,
+      ...files.map((file) => ({ file, preview: URL.createObjectURL(file) })),
+    ]);
+    e.target.value = "";
+  };
+
+  const removeNewImage = (idx: number) => {
+    setNewImages((prev) => {
+      const target = prev[idx];
+      if (target) URL.revokeObjectURL(target.preview);
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
+
+  const resetUploads = () => {
+    clearCover();
+    setNewImages((prev) => {
+      prev.forEach((img) => URL.revokeObjectURL(img.preview));
+      return [];
+    });
+  };
+
   const load = async () => {
     const { data } = await supabase
       .from("projects")
@@ -73,17 +121,11 @@ export default function AdminProjects() {
     setBusy(true);
     try {
       let cover = form.cover_url || "";
-      const coverInput = document.getElementById(
-        "cover-file",
-      ) as HTMLInputElement | null;
-      if (coverInput?.files?.[0]) {
-        cover = await uploadFile(coverInput.files[0], "portfolio-images");
+      if (coverFile) {
+        cover = await uploadFile(coverFile, "portfolio-images");
       }
 
-      const imageFiles = Array.from(
-        (document.getElementById("image-files") as HTMLInputElement | null)
-          ?.files || [],
-      );
+      const imageFiles = newImages.map((img) => img.file);
       const documentFiles = Array.from(
         (document.getElementById("document-files") as HTMLInputElement | null)
           ?.files || [],
@@ -167,6 +209,7 @@ export default function AdminProjects() {
 
       setOpen(false);
       setForm(empty);
+      resetUploads();
       await load();
     } catch (err: any) {
       alert(err.message || "Không thể lưu dự án");
@@ -182,6 +225,7 @@ export default function AdminProjects() {
       learnings_text: p.learnings?.join("\n"),
       description_text: p.description?.join("\n"),
     });
+    resetUploads();
     setOpen(true);
   };
 
@@ -204,6 +248,7 @@ export default function AdminProjects() {
             className="primary-button"
             onClick={() => {
               setForm(empty);
+              resetUploads();
               setOpen(true);
             }}
           >
@@ -391,21 +436,92 @@ export default function AdminProjects() {
                     }
                   />
                 </label>
-                <label className="upload-field">
-                  <Upload />
-                  Ảnh bìa (đại diện)
-                  <input id="cover-file" type="file" accept="image/*" />
-                </label>
-                <label className="upload-field full-field">
-                  <Upload />
-                  Các ảnh khác của dự án
+                <div className="upload-block">
+                  <span className="upload-block-label">
+                    <Upload size={16} />
+                    Ảnh bìa (đại diện)
+                  </span>
                   <input
+                    ref={coverInputRef}
+                    id="cover-file"
+                    type="file"
+                    accept="image/*"
+                    onChange={onCoverChange}
+                    hidden
+                  />
+                  {coverPreview ? (
+                    <div className="upload-cover-preview">
+                      <img src={coverPreview} alt="Ảnh bìa mới" />
+                      <button
+                        type="button"
+                        className="upload-remove-btn"
+                        onClick={clearCover}
+                        title="Hủy ảnh này"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : form.cover_url ? (
+                    <div className="upload-cover-preview">
+                      <img src={form.cover_url} alt="Ảnh bìa hiện tại" />
+                      <button
+                        type="button"
+                        className="upload-change-btn"
+                        onClick={() => coverInputRef.current?.click()}
+                      >
+                        Đổi ảnh
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="upload-dropzone"
+                      onClick={() => coverInputRef.current?.click()}
+                    >
+                      <Upload size={22} />
+                      <span>Chọn ảnh bìa</span>
+                      <small>PNG, JPG, WEBP</small>
+                    </button>
+                  )}
+                </div>
+                <div className="upload-block full-field">
+                  <span className="upload-block-label">
+                    <Upload size={16} />
+                    Các ảnh khác của dự án
+                  </span>
+                  <input
+                    ref={imagesInputRef}
                     id="image-files"
                     type="file"
                     accept="image/*"
                     multiple
+                    onChange={onImagesChange}
+                    hidden
                   />
-                </label>
+                  <div className="upload-multi-grid">
+                    {newImages.map((img, idx) => (
+                      <div key={idx} className="upload-thumb">
+                        <img src={img.preview} alt={`Ảnh mới ${idx + 1}`} />
+                        <button
+                          type="button"
+                          className="upload-remove-btn"
+                          onClick={() => removeNewImage(idx)}
+                          title="Hủy ảnh này"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="upload-dropzone upload-dropzone-small"
+                      onClick={() => imagesInputRef.current?.click()}
+                    >
+                      <Upload size={20} />
+                      <span>Thêm ảnh</span>
+                    </button>
+                  </div>
+                </div>
                 {form.image_urls && form.image_urls.length > 0 && (
                   <div className="full-field">
                     <p

@@ -1,0 +1,2 @@
+Đây là tệp tài liệu mẫu của HoiKroos Portfolio.
+Hãy thay tệp này bằng tài liệu thật của bạn và giữ nguyên đường dẫn hoặc cập nhật href trong source code.

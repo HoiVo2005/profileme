@@ -13,7 +13,7 @@ export default function HomePage() {
       <Header active="home" />
       <main className="container page-shell">
         <section className="hero">
-          <div className="hero-copy"><div className="hello">Xin chào! Mình là <b>Võ Đình Hội</b> 👋</div><h1><span>Công Nghệ Thông Tin</span></h1><p>Nơi lưu trữ và tải thông tin các dự án website, phần mềm và ứng dụng mình đã thực hiện.</p><div className="hero-actions"><a href="#projects" className="primary-button"><Rocket size={18}/>Xem dự án</a><a href="/documents/ho-so-nang-luc.txt" download className="outline-button"><Download size={18}/>Tải hồ sơ</a></div></div>
+          <div className="hero-copy"><div className="hello">Xin chào! Mình là <b> Võ Đình Hội</b> 👋</div><h1><span>Công Nghệ Thông Tin</span></h1><p>Nơi lưu trữ và tải thông tin các dự án website, phần mềm và ứng dụng mình đã thực hiện.</p><div className="hero-actions"><a href="#projects" className="primary-button"><Rocket size={18}/>Xem dự án</a><a href="/documents/ho-so-nang-luc.txt" download className="outline-button"><Download size={18}/>Tải hồ sơ</a></div></div>
           <div className="hero-art"><div className="floating code">&lt;/&gt;</div><div className="floating braces">{'{}'}</div><div className="floating db">DB</div><ProjectVisual /></div>
         </section>
         <section className="stats">

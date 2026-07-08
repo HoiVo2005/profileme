@@ -2,17 +2,38 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Facebook, Github, Linkedin, Mail, MapPin, MessageCircle, Phone, Send } from "lucide-react";
+import { AlertCircle, CheckCircle2, Facebook, Github, Linkedin, Mail, MapPin, MessageCircle, Phone, Send } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { supabase } from "@/lib/supabase/client";
 
 export default function ContactPage() {
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSent(true);
-    event.currentTarget.reset();
+    setError("");
+    setSending(true);
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    try {
+      const { error: insertError } = await supabase.from("contact_messages").insert({
+        full_name: String(data.get("name") || ""),
+        phone: String(data.get("phone") || ""),
+        email: String(data.get("email") || ""),
+        subject: String(data.get("subject") || ""),
+        message: String(data.get("message") || ""),
+      });
+      if (insertError) throw insertError;
+      setSent(true);
+      form.reset();
+    } catch (err: any) {
+      setError(err?.message || "Gửi thất bại, vui lòng thử lại sau.");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -50,7 +71,8 @@ export default function ContactPage() {
 
           <section className="content-card contact-form-card">
             <div className="section-heading"><div><span className="eyebrow"><Send size={15}/> Gửi lời nhắn</span><h2>Cho mình biết về dự án của bạn</h2></div></div>
-            {sent && <div className="form-success"><CheckCircle2/> Đã ghi nhận thông tin. Đây là form giao diện mẫu, bạn có thể kết nối EmailJS, Supabase hoặc API sau.</div>}
+            {sent && <div className="form-success"><CheckCircle2/> Đã gửi thông tin thành công. Mình sẽ liên hệ lại với bạn sớm nhất có thể.</div>}
+            {error && <div className="form-error"><AlertCircle/> {error}</div>}
             <form className="contact-form" onSubmit={submit}>
               <div className="form-row">
                 <label>Họ và tên<input name="name" required placeholder="Nhập họ và tên" /></label>
@@ -59,7 +81,9 @@ export default function ContactPage() {
               <label>Email<input type="email" name="email" required placeholder="example@gmail.com" /></label>
               <label>Chủ đề<select name="subject" defaultValue=""><option value="" disabled>Chọn nội dung cần trao đổi</option><option>Thiết kế website</option><option>Hệ thống quản lý</option><option>Hợp tác dự án</option><option>Nội dung khác</option></select></label>
               <label>Nội dung<textarea name="message" required rows={6} placeholder="Mô tả ngắn về ý tưởng hoặc yêu cầu của bạn..." /></label>
-              <button className="primary-button submit-button" type="submit"><Send size={18}/> Gửi thông tin</button>
+              <button className="primary-button submit-button" type="submit" disabled={sending}>
+                <Send size={18}/> {sending ? "Đang gửi..." : "Gửi thông tin"}
+              </button>
             </form>
           </section>
         </div>

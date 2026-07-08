@@ -1,16 +1,74 @@
 "use client";
-import { FormEvent, useEffect, useState } from "react";
-import { Download, FileText, Pencil, Trash2, Upload, X } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Download,
+  File as FileIcon,
+  FileArchive,
+  FileSpreadsheet,
+  FileText,
+  FolderOpen,
+  HardDrive,
+  Image as ImageIcon,
+  Pencil,
+  Search,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import AdminGuard from "@/components/admin/AdminGuard";
 import AdminShell from "@/components/admin/AdminShell";
 import { supabase } from "@/lib/supabase/client";
 import type { DocumentItem, Project } from "@/types";
+
+const fileMeta = (fileType: string | null, title: string) => {
+  const t = (fileType || "").toLowerCase();
+  const name = title.toLowerCase();
+  const is = (...exts: string[]) => exts.some((x) => t.includes(x) || name.endsWith(x));
+
+  if (is("pdf"))
+    return { icon: FileText, color: "#dc2626", bg: "#fef2f2", label: "PDF" };
+  if (is("doc", "docx"))
+    return { icon: FileText, color: "#2563eb", bg: "#eff6ff", label: "Word" };
+  if (is("xls", "xlsx", "csv"))
+    return {
+      icon: FileSpreadsheet,
+      color: "#059669",
+      bg: "#ecfdf5",
+      label: "Excel",
+    };
+  if (is("zip", "rar", "7z"))
+    return {
+      icon: FileArchive,
+      color: "#ea580c",
+      bg: "#fff7ed",
+      label: "Nén",
+    };
+  if (is("png", "jpg", "jpeg", "webp", "gif", "svg"))
+    return {
+      icon: ImageIcon,
+      color: "#7c3aed",
+      bg: "#f5f3ff",
+      label: "Ảnh",
+    };
+  return { icon: FileIcon, color: "#4b5563", bg: "#f3f4f6", label: "Tệp" };
+};
+
+const formatFileSize = (bytes: number | null) => {
+  if (!bytes) return "-";
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+};
 
 export default function AdminDocuments() {
   const [items, setItems] = useState<DocumentItem[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [form, setForm] = useState({ title: "", project_id: "" });
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pickedFile, setPickedFile] = useState<File | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ title: "", project_id: "" });
@@ -33,19 +91,28 @@ export default function AdminDocuments() {
     load();
   }, []);
 
+  const onPickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPickedFile(file);
+  };
+
+  const clearPickedFile = () => {
+    setPickedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const input = document.getElementById("document-file") as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return alert("Chọn file");
+    if (!pickedFile) return alert("Chọn file");
 
     setBusy(true);
     try {
-      const filename = file.name.replace(/\s+/g, "-");
+      const filename = pickedFile.name.replace(/\s+/g, "-");
       const path = `documents/${Date.now()}-${filename}`;
       const { error: uploadError } = await supabase.storage
         .from("portfolio-documents")
-        .upload(path, file);
+        .upload(path, pickedFile);
 
       if (uploadError) throw uploadError;
 
@@ -53,18 +120,18 @@ export default function AdminDocuments() {
         .from("portfolio-documents")
         .getPublicUrl(path).data.publicUrl;
       const { error } = await supabase.from("documents").insert({
-        title: form.title || file.name,
+        title: form.title || pickedFile.name,
         file_url: url,
         file_path: path,
-        file_type: file.type,
-        file_size: file.size,
+        file_type: pickedFile.type,
+        file_size: pickedFile.size,
         project_id: form.project_id || null,
       });
 
       if (error) throw error;
 
       setForm({ title: "", project_id: "" });
-      input.value = "";
+      clearPickedFile();
       load();
     } catch (err: any) {
       alert(err.message || "Tải thất bại");
@@ -124,12 +191,18 @@ export default function AdminDocuments() {
     return projects.find((p) => p.id === projectId)?.title || "Không xác định";
   };
 
-  const formatFileSize = (bytes: number | null) => {
-    if (!bytes) return "-";
-    if (bytes < 1024) return bytes + " B";
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-  };
+  const filtered = useMemo(
+    () =>
+      items.filter((item) =>
+        item.title.toLowerCase().includes(query.trim().toLowerCase()),
+      ),
+    [items, query],
+  );
+
+  const totalSize = items.reduce((sum, i) => sum + (i.file_size || 0), 0);
+  const linkedProjects = new Set(
+    items.filter((i) => i.project_id).map((i) => i.project_id),
+  ).size;
 
   return (
     <AdminGuard>
@@ -141,6 +214,45 @@ export default function AdminDocuments() {
             <p>Tải PDF, DOCX, ZIP hoặc tài liệu dự án lên Supabase Storage.</p>
           </div>
         </header>
+
+        <div className="stat-cards">
+          <div className="stat-card">
+            <span
+              className="stat-icon"
+              style={{ background: "#eef2ff", color: "#4f46e5" }}
+            >
+              <FileText size={18} />
+            </span>
+            <div>
+              <small>Tổng tài liệu</small>
+              <strong>{items.length}</strong>
+            </div>
+          </div>
+          <div className="stat-card">
+            <span
+              className="stat-icon"
+              style={{ background: "#e7f9f1", color: "#059669" }}
+            >
+              <HardDrive size={18} />
+            </span>
+            <div>
+              <small>Tổng dung lượng</small>
+              <strong>{formatFileSize(totalSize)}</strong>
+            </div>
+          </div>
+          <div className="stat-card">
+            <span
+              className="stat-icon"
+              style={{ background: "#fff1e8", color: "#ea580c" }}
+            >
+              <FolderOpen size={18} />
+            </span>
+            <div>
+              <small>Dự án có tài liệu</small>
+              <strong>{linkedProjects}</strong>
+            </div>
+          </div>
+        </div>
 
         <div className="admin-two-column">
           <form className="admin-panel admin-form" onSubmit={submit}>
@@ -169,31 +281,101 @@ export default function AdminDocuments() {
                 ))}
               </select>
             </label>
-            <label className="upload-field large">
-              <Upload />
-              Chọn file
-              <input id="document-file" type="file" required />
-            </label>
+
+            <div className="upload-block">
+              <span className="upload-block-label">
+                <Upload size={16} />
+                Tệp tài liệu
+              </span>
+              <input
+                ref={fileInputRef}
+                id="document-file"
+                type="file"
+                onChange={onPickFile}
+                hidden
+              />
+              {pickedFile ? (
+                (() => {
+                  const meta = fileMeta(pickedFile.type, pickedFile.name);
+                  const Icon = meta.icon;
+                  return (
+                    <div className="picked-file-row">
+                      <span
+                        className="picked-file-icon"
+                        style={{ background: meta.bg, color: meta.color }}
+                      >
+                        <Icon size={20} />
+                      </span>
+                      <div className="picked-file-info">
+                        <b>{pickedFile.name}</b>
+                        <small>{formatFileSize(pickedFile.size)}</small>
+                      </div>
+                      <button
+                        type="button"
+                        className="upload-remove-btn upload-remove-btn-static"
+                        onClick={clearPickedFile}
+                        title="Hủy chọn file"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  );
+                })()
+              ) : (
+                <button
+                  type="button"
+                  className="upload-dropzone"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload size={22} />
+                  <span>Chọn tệp để tải lên</span>
+                  <small>PDF, DOCX, XLSX, ZIP...</small>
+                </button>
+              )}
+            </div>
+
             <button className="primary-button" disabled={busy}>
               {busy ? "Đang tải..." : "Tải lên Supabase"}
             </button>
           </form>
 
           <section className="admin-panel">
-            <h2>Tài liệu đã tải ({items.length})</h2>
-            {items.length > 0 ? (
+            <div className="panel-head-row">
+              <h2>Tài liệu đã tải ({filtered.length})</h2>
+              <div className="mini-search">
+                <Search size={15} />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Tìm tài liệu..."
+                />
+              </div>
+            </div>
+            {filtered.length > 0 ? (
               <div className="document-list">
-                {items.map((item) =>
-                  editingId === item.id ? (
+                {filtered.map((item) => {
+                  const meta = fileMeta(item.file_type, item.title);
+                  const Icon = meta.icon;
+                  return editingId === item.id ? (
                     <form
                       key={item.id}
                       className="document-row document-row-editing"
                       onSubmit={saveEdit}
                     >
-                      <div className="document-icon">
-                        <FileText size={32} />
+                      <div
+                        className="document-icon"
+                        style={{ background: meta.bg, color: meta.color }}
+                      >
+                        <Icon size={22} />
                       </div>
-                      <div className="document-info" style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <div
+                        className="document-info"
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "8px",
+                        }}
+                      >
                         <input
                           value={editForm.title}
                           onChange={(e) =>
@@ -205,7 +387,10 @@ export default function AdminDocuments() {
                         <select
                           value={editForm.project_id}
                           onChange={(e) =>
-                            setEditForm({ ...editForm, project_id: e.target.value })
+                            setEditForm({
+                              ...editForm,
+                              project_id: e.target.value,
+                            })
                           }
                         >
                           <option value="">Tài liệu chung</option>
@@ -227,14 +412,22 @@ export default function AdminDocuments() {
                     </form>
                   ) : (
                     <article key={item.id} className="document-row">
-                      <div className="document-icon">
-                        <FileText size={32} />
+                      <div
+                        className="document-icon"
+                        style={{ background: meta.bg, color: meta.color }}
+                      >
+                        <Icon size={22} />
                       </div>
                       <div className="document-info">
                         <b>{item.title}</b>
                         <small>{getProjectTitle(item.project_id)}</small>
                         <div className="document-meta">
-                          <span>{item.file_type || "Tài liệu"}</span>
+                          <span
+                            className="file-type-badge"
+                            style={{ background: meta.bg, color: meta.color }}
+                          >
+                            {meta.label}
+                          </span>
                           <span>{formatFileSize(item.file_size)}</span>
                         </div>
                       </div>
@@ -255,12 +448,14 @@ export default function AdminDocuments() {
                         </button>
                       </div>
                     </article>
-                  )
-                )}
+                  );
+                })}
               </div>
             ) : (
-              <p style={{ color: "#667085", marginTop: "20px" }}>
-                Chưa có tài liệu nào. Hãy tải tài liệu đầu tiên.
+              <p className="empty-admin">
+                {items.length === 0
+                  ? "Chưa có tài liệu nào. Hãy tải tài liệu đầu tiên."
+                  : "Không tìm thấy tài liệu phù hợp."}
               </p>
             )}
           </section>

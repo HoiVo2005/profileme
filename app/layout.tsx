@@ -5,6 +5,11 @@ import { ClientLayout } from "./ClientLayout";
 export const metadata: Metadata = {
   title: "Profile Công Nghệ Thông Tin - Võ Đình Hội",
   description: "Profile dự án Công nghệ Thông tin của Võ Đình Hội",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

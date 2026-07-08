@@ -1,19 +1,23 @@
 "use client";
 import { FormEvent, useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2, X } from "lucide-react";
 import AdminGuard from "@/components/admin/AdminGuard";
 import AdminShell from "@/components/admin/AdminShell";
 import { supabase } from "@/lib/supabase/client";
 import type { Skill } from "@/types";
 
+const emptyForm = {
+  name: "",
+  category: "Frontend",
+  level: 80,
+  sort_order: 0,
+};
+
 export default function AdminSkills() {
   const [items, setItems] = useState<Skill[]>([]);
-  const [form, setForm] = useState({
-    name: "",
-    category: "Frontend",
-    level: 80,
-    sort_order: 0,
-  });
+  const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const load = async () => {
     const { data } = await supabase
@@ -27,24 +31,48 @@ export default function AdminSkills() {
     load();
   }, []);
 
-  const add = async (e: FormEvent) => {
+  const startEdit = (s: Skill) => {
+    setEditingId(s.id);
+    setForm({
+      name: s.name,
+      category: s.category,
+      level: s.level,
+      sort_order: s.sort_order,
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setForm({ ...emptyForm, sort_order: items.length });
+  };
+
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const { error } = await supabase.from("skills").insert(form);
-    if (error) alert(error.message);
-    else {
-      setForm({
-        name: "",
-        category: "Frontend",
-        level: 80,
-        sort_order: items.length,
-      });
+    setSaving(true);
+    try {
+      if (editingId) {
+        const { error } = await supabase
+          .from("skills")
+          .update(form)
+          .eq("id", editingId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("skills").insert(form);
+        if (error) throw error;
+      }
+      cancelEdit();
       load();
+    } catch (err: any) {
+      alert(err.message || "Lưu thất bại");
+    } finally {
+      setSaving(false);
     }
   };
 
   const remove = async (id: string) => {
     if (confirm("Xóa kỹ năng?")) {
       await supabase.from("skills").delete().eq("id", id);
+      if (editingId === id) cancelEdit();
       load();
     }
   };
@@ -60,8 +88,8 @@ export default function AdminSkills() {
           </div>
         </header>
         <div className="admin-two-column">
-          <form className="admin-panel admin-form" onSubmit={add}>
-            <h2>Thêm kỹ năng</h2>
+          <form className="admin-panel admin-form" onSubmit={submit}>
+            <h2>{editingId ? "Sửa kỹ năng" : "Thêm kỹ năng"}</h2>
             <label>
               Tên kỹ năng
               <input
@@ -94,16 +122,34 @@ export default function AdminSkills() {
                 }
               />
             </label>
-            <button className="primary-button">
-              <Plus />
-              Thêm kỹ năng
-            </button>
+            <label>
+              Thứ tự hiển thị
+              <input
+                type="number"
+                value={form.sort_order}
+                onChange={(e) =>
+                  setForm({ ...form, sort_order: Number(e.target.value) })
+                }
+              />
+            </label>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button className="primary-button" disabled={saving}>
+                {editingId ? <Pencil size={16} /> : <Plus size={16} />}
+                {saving ? "Đang lưu..." : editingId ? "Lưu thay đổi" : "Thêm kỹ năng"}
+              </button>
+              {editingId && (
+                <button type="button" className="outline-button" onClick={cancelEdit}>
+                  <X size={16} />
+                  Hủy
+                </button>
+              )}
+            </div>
           </form>
           <section className="admin-panel">
             <h2>Danh sách kỹ năng</h2>
             <div className="skill-admin-list">
               {items.map((s) => (
-                <article key={s.id}>
+                <article key={s.id} className={editingId === s.id ? "editing" : ""}>
                   <div>
                     <b>{s.name}</b>
                     <small>{s.category}</small>
@@ -112,8 +158,11 @@ export default function AdminSkills() {
                     <span style={{ width: `${s.level}%` }} />
                   </div>
                   <strong>{s.level}%</strong>
-                  <button onClick={() => remove(s.id)}>
-                    <Trash2 />
+                  <button onClick={() => startEdit(s)} title="Sửa">
+                    <Pencil size={16} />
+                  </button>
+                  <button onClick={() => remove(s.id)} title="Xóa">
+                    <Trash2 size={16} />
                   </button>
                 </article>
               ))}

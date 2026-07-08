@@ -41,19 +41,20 @@ export default function Dashboard() {
   const load = async () => {
     try {
       // Get counts from Supabase
-      const [p, s, d, pub, v] = await Promise.all([
-        supabase.from("projects").select("id", { count: "exact" }),
-        supabase.from("skills").select("id", { count: "exact" }),
-        supabase.from("documents").select("id", { count: "exact" }),
+      const [p, s, d, pub, v, vTotal] = await Promise.all([
+        supabase.from("projects").select("id", { count: "exact", head: true }),
+        supabase.from("skills").select("id", { count: "exact", head: true }),
+        supabase.from("documents").select("id", { count: "exact", head: true }),
         supabase
           .from("projects")
-          .select("id", { count: "exact" })
+          .select("id", { count: "exact", head: true })
           .eq("published", true),
         supabase
           .from("visitors")
           .select("*")
           .order("created_at", { ascending: false })
           .limit(50),
+        supabase.from("visitors").select("id", { count: "exact", head: true }),
       ]);
 
       setStats({
@@ -61,7 +62,7 @@ export default function Dashboard() {
         skills: s.count ?? 0,
         documents: d.count ?? 0,
         published: pub.count ?? 0,
-        visitors: (v.data || []).length,
+        visitors: vTotal.count ?? (v.data || []).length,
       });
 
       setVisitors((v.data || []) as Visitor[]);

@@ -57,6 +57,8 @@ const createQueryBuilder = (baseUrl: string, anonKey: string, table: string): Qu
     select: string;
     queryParams: Array<{ key: string; value: string }>;
     body?: any;
+    countMode?: 'exact' | 'planned' | 'estimated';
+    head?: boolean;
   } = {
     method: 'GET',
     select: '*',
@@ -77,8 +79,16 @@ const createQueryBuilder = (baseUrl: string, anonKey: string, table: string): Qu
       'Content-Type': 'application/json',
     };
 
+    // Request a total row count from PostgREST via the Prefer header.
+    // Without this, PostgREST never returns Content-Range and `count`
+    // stays undefined no matter how many rows exist.
+    const preferParts: string[] = [];
+    if (state.countMode) preferParts.push(`count=${state.countMode}`);
+    if (state.head) preferParts.push('return=minimal');
+    if (preferParts.length) headers.Prefer = preferParts.join(',');
+
     const requestInit: RequestInit = {
-      method: state.method,
+      method: state.head ? 'HEAD' : state.method,
       headers,
     };
 
@@ -88,19 +98,36 @@ const createQueryBuilder = (baseUrl: string, anonKey: string, table: string): Qu
 
     try {
       const response = await fetch(url, requestInit);
-      const payload = await parseJson(response);
-      if (!response.ok) {
-        return { data: null, error: { message: typeof payload === 'string' ? payload : payload?.message || 'Supabase request failed' } };
+
+      // PostgREST returns the total count in the Content-Range header,
+      // e.g. "0-9/97" (97 = total rows) or "*/97" for HEAD requests.
+      let count: number | null = null;
+      const contentRange = response.headers.get('content-range');
+      if (contentRange && contentRange.includes('/')) {
+        const total = contentRange.split('/')[1];
+        count = total && total !== '*' ? Number(total) : null;
       }
-      return { data: payload ?? [], error: null };
+
+      const payload = state.head ? null : await parseJson(response);
+      if (!response.ok) {
+        return {
+          data: null,
+          count,
+          error: { message: typeof payload === 'string' ? payload : payload?.message || 'Supabase request failed' },
+        };
+      }
+      return { data: payload ?? [], count, error: null };
     } catch (error: any) {
-      return { data: null, error: { message: error?.message || 'Supabase request failed' } };
+      return { data: null, count: null, error: { message: error?.message || 'Supabase request failed' } };
     }
   };
 
   const chain: QueryBuilder = {
     select: (...args: any[]) => {
       state.select = args[0] ?? '*';
+      const options = args[1] as { count?: 'exact' | 'planned' | 'estimated'; head?: boolean } | undefined;
+      if (options?.count) state.countMode = options.count;
+      if (options?.head) state.head = true;
       return chain;
     },
     eq: (...args: any[]) => {

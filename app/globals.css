@@ -963,7 +963,6 @@ input {
 .gallery-main img {
     width: 100%;
     height: 100%;
-    object-fit: cover
 }
 
 .gallery-nav {
@@ -2015,7 +2014,6 @@ input {
 .project-cover {
     width: 100%;
     height: 190px;
-    object-fit: cover;
     border-radius: 14px 14px 0 0
 }
 
